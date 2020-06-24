@@ -1,0 +1,82 @@
+---
+- name: CONFIG HOSTS FOR CDP DC
+  hosts: cdpdc
+  gather_facts: yes
+  become: yes
+  tasks:
+    - include_vars: "{{ vault }}"
+    - include_vars: "{{ infra }}"
+    - include_vars: "{{ cluster }}"
+
+    - name: configure OS for all servers
+      include_role:
+        name: cdpdc_os_config
+      vars:
+        _cloud_provider: "{{ instances.cloud }}"
+
+
+- name: CONFIGURE CM DATABASES
+  hosts: db_server
+  become: yes
+  tasks:
+    - include_vars: "{{ vault }}"
+    - include_vars: "{{ infra }}"
+    - include_vars: "{{ cluster }}"
+
+    - name: configure CM databases
+      include_role:
+        name: cdpdc_database
+      vars:
+        _type: "{{ cdpdc.cm.db.type }}"
+        _list: "{{ cdpdc.cm.db.list }}"
+    
+    # TODO: PGSQL is temporary only
+    - name: install and config pgsql for ranger
+      include_tasks: scripts/pgsql.yml
+
+- name: INSTALL AND CONFIGURE SMM REQUIREMENTS 
+  hosts: cdf
+  become: yes
+  tasks:
+    - name: run prereqs for SMM
+      include_tasks: scripts/prereqs-smm.yml
+
+
+- name: INSTALL AND CONFIGURE CEM 
+  hosts: cdf
+  become: yes
+  tasks:   
+    - name: set vars for install-cem.yml
+      set_fact:
+        # efm.properties
+        efm_server_address: "{{ hostvars[groups.cdf[0]].private_hostname }}" 
+        efm_nifi_registry_url_host: "{{ hostvars[groups.cdf[0]].private_hostname }}"
+        efm_db_url_host: "{{ hostvars[groups.main_master[0]].private_hostname }}"
+        # bootstrap.conf
+        nifi_c2_rest_url_host: "{{ hostvars[groups.cdf[0]].private_hostname }}"
+        nifi_c2_rest_url_ack_host: "{{ hostvars[groups.cdf[0]].private_hostname }}"
+
+    - name: add CEM tasks
+      include_tasks: scripts/install-cem.yml
+
+        
+- name: PROVISION CMS AND CLUSTER
+  hosts: cm_server
+  become: yes
+  tasks:
+    - include_vars: "{{ vault }}"
+    - include_vars: "{{ cluster }}"
+    
+    - name: create list with all hosts private hostnames
+      set_fact:
+        _m: "{{ hostvars[item].private_hostname }}"
+      loop: "{{ groups.cdpdc }}"
+      register: m
+
+    - name: Install cm server and deploy cluster template
+      include_role:
+        name: cdpdc_cm_server
+      vars:
+        _hosts: "{{ m.results | map(attribute='ansible_facts._m') | list }}"
+
+

@@ -1,0 +1,434 @@
+---
+- name: Run os_family specific tasks
+  include_tasks: "{{ ansible_facts.os_family | lower }}.yml"
+
+- name: Prepare the Cloudera Manager database 'scm'
+  shell: |
+    /opt/cloudera/cm/schema/scm_prepare_database.sh \
+    {{ cdpdc.cm.db.type }} {{ cdpdc.cm.db.list[0].name }} {{ cdpdc.cm.db.list[0].user }} {{ cdpdc.cm.db.list[0].pass }}
+
+- name: get extra CSDs
+  get_url:
+    url: "{{ item }}"
+    dest: /opt/cloudera/csd/
+  loop: "{{ cdpdc.cm.csds }}"
+  when: cdpdc.cm.csds is defined
+
+# TODO: temp workaround, no need to ansible-ize
+- name: temporary fix for CDSW to make it work with CR7
+  shell: |
+    rm -rf /tmp/cdswjar
+    wget https://archive.cloudera.com/cdsw1/1.6.1/csd/CLOUDERA_DATA_SCIENCE_WORKBENCH-CDH6-1.6.1.jar -P /tmp/cdswjar
+    cd /tmp/cdswjar
+    jar xvf CLOUDERA_DATA_SCIENCE_WORKBENCH-CDH6-1.6.1.jar 
+    rm -rf CLOUDERA_DATA_SCIENCE_WORKBENCH-CDH6-1.6.1.jar 
+    sed -i 's/"max" : "6"/"max" : "7"/' descriptor/service.sdl 
+    sed -i 's/<cdh.max.version>6/<cdh.max.version>7/' META-INF/maven/com.cloudera.csd/CLOUDERA_DATA_SCIENCE_WORKBENCH-CDH6/pom.xml
+    jar cvf CLOUDERA_DATA_SCIENCE_WORKBENCH-CDH6-1.6.1.jar *
+    mv CLOUDERA_DATA_SCIENCE_WORKBENCH-CDH6-1.6.1.jar /opt/cloudera/csd/
+    cd /tmp
+    rm -rf /tmp/cdswjar
+  when: cdpdc.cm.cdsw_jar_with_fix_for_cr7
+
+# INSTALL LOCAL PARCELS AND CSDs
+- name: upload local CSDs
+  copy:
+    src: "{{ item }}"
+    dest: /opt/cloudera/csd/
+    owner: cloudera-scm
+    group: cloudera-scm
+    mode: '0644'
+  loop: "{{ cdpdc.cm.local_csds }}"
+  when: cdpdc.cm.local_csds is defined
+
+- name: upload local Parcels and sha files
+  copy:
+    src: "{{ item }}"
+    dest: /opt/cloudera/parcel-repo/
+    owner: cloudera-scm
+    group: cloudera-scm
+    mode: '0644'
+  loop: "{{ cdpdc.cm.local_parcels }}"
+  when: cdpdc.cm.local_parcels is defined
+
+
+
+# AUTO-TLS
+# TODO NOT IDEMPOTENT
+- name: Run AUTO-TLS
+  block:
+    - name: run shell command for auto-tls
+      shell: |
+        JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac)))) \
+        /opt/cloudera/cm-agent/bin/certmanager setup --configure-services
+      register: _out
+      ignore_errors: yes
+      # fatal: [172.26.234.122]: FAILED! => changed=true 
+      #   cmd: |-
+      #     JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac)))) /opt/cloudera/cm-agent/bin/certmanager setup --configure-services
+      #   delta: '0:00:00.421426'
+      #   end: '2020-01-22 15:25:06.079134'
+      #   msg: non-zero return code
+      #   rc: 1
+      #   start: '2020-01-22 15:25:05.657708'
+      #   stderr: |-
+      #     INFO:root:Logging to /var/log/cloudera-scm-agent/certmanager.log
+      #     Traceback (most recent call last):
+      #       File "/opt/cloudera/cm-agent/lib/python2.7/site-packages/cmf/tools/cert.py", line 1152, in init_certmanager
+      #         raise Exception("It seems that a CA setup has already been created.")
+      #     Exception: It seems that a CA setup has already been created.
+      #   stderr_lines: <omitted>
+      #   stdout: ''
+      #   stdout_lines: <omitted>
+
+
+    - debug: var=_out
+  when: cdpdc.cm.auto_tls
+
+
+
+
+# START CM
+- name: Start the Cloudera Manager Server
+  service:
+    name: cloudera-scm-server
+    state: started
+    enabled: yes
+
+- name: wait for cloudera-scm-server to be up and running
+  wait_for:
+    host: localhost
+    port: 7180
+    sleep: 10
+    state: started
+    timeout: 300
+
+- name: create temp var for CM API URL
+  set_fact:
+    _cm_api_url: "{{ cdpdc.cm.protocol }}://{{ cdpdc.cm.host }}:{{ cdpdc.cm.port }}{{ cdpdc.cm.path }}"
+
+
+
+
+
+# LICENSE
+# if fresh install, api returns a 404 
+- name: Trial License
+  block:
+    - name: get License details
+      uri:
+        url: "{{ _cm_api_url }}/cm/license"
+        user: "{{ cdpdc.cm.user }}"
+        password: "{{ cdpdc.cm.pass }}"
+        status_code:
+          - 200
+          - 404
+      register: _license
+
+    # if fresh install, the response will have a key called 'message', else it won't.
+    - name: begin Trial License
+      uri:
+        url: "{{ _cm_api_url }}/cm/trial/begin"
+        user: "{{ cdpdc.cm.user }}"
+        password: "{{ cdpdc.cm.pass }}"
+        status_code:
+          - 204
+        method: POST
+      when: _license.json.message is defined
+  when: cdpdc.cm.license.type == "trial"
+
+- name: Enterprise license
+  block:
+    - name: upload lic file to host
+      copy:
+        src: "{{ cdpdc.cm.license.filepath }}"
+        dest: /root/lic.txt
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Upload license file to Cloudera Manager
+      shell: |
+        curl \
+        -k -u {{ cdpdc.cm.user }}:{{ cdpdc.cm.pass }} \
+        -X POST -H 'Content-Type:multipart/form-data' \
+        -F license=@/root/lic.txt \
+        {{ _cm_api_url }}/cm/license
+      args:
+        warn: False
+      register: resp
+      failed_when: "'owner' not in resp.stdout"
+  when: cdpdc.cm.license.type == "enterprise"
+
+
+
+
+
+
+# INSTALL CM AGENTS VIA CM
+- name: get list of registered CM hosts
+  uri:
+    url: "{{ _cm_api_url }}/hosts"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _cm_hosts
+
+- name: create list of CM hosts FQDNs
+  set_fact:
+    _cm_hosts_fqdns: "{{ _cm_hosts | json_query('json.items[*].hostname') }}"
+
+- name: get list of all hosts that require CM Agent
+  set_fact:
+    _new_hosts: "{{ _hosts | difference(_cm_hosts_fqdns) }}"
+
+- name: install CM Agent
+  uri:
+    url: "{{ _cm_api_url }}/cm/commands/hostInstall"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    method: POST
+    body_format: json
+    body: 
+      hostNames: "{{ _new_hosts }}"
+      sshPort: 22
+      userName: root
+      privateKey: "{{ cdpdc.private_key }}"
+      passphrase: ""
+      cmRepoUrl: "{{ cdpdc.cm.repo_url }}"
+      javaInstallStrategy: NONE
+    validate_certs: no
+  when: (_new_hosts | length > 0)
+  register: _api_command
+
+- name: check until _api_command exits
+  uri:
+    url: "{{ _cm_api_url }}/commands/{{ _api_command.json.id }}"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _api_command
+  until: not _api_command.json.active 
+  retries: 60
+  delay: 10
+  failed_when: _api_command.json.success is defined and not _api_command.json.success
+  when: _api_command.json.id is defined
+
+- name: reset var _api_command
+  set_fact:
+    _api_command: ""
+
+
+
+
+
+
+
+# CM CONFIG AND KRB CREDENTIALS
+- name: Update Cloudera Manager config
+  uri:
+    url: "{{ _cm_api_url }}/cm/config"
+    method: PUT
+    body_format: json
+    body: 
+      items: "{{ cdpdc.cm.config }}"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  when: cdpdc.cm.config is defined
+
+- name: Import KDC admin credentials
+  uri:
+    url: "{{ _cm_api_url }}/cm/commands/importAdminCredentials?username={{ krb5_kdc_admin_user }}&password={{ krb5_kdc_admin_passwd }}"
+    method: POST
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _api_command
+  when: cdpdc.cm.kerberized
+
+- name: check until _api_command exits
+  uri:
+    url: "{{ _cm_api_url }}/commands/{{ _api_command.json.id }}"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _api_command
+  until: not _api_command.json.active 
+  retries: 30
+  delay: 10
+  failed_when: _api_command.json.success is defined and not _api_command.json.success
+  when: _api_command.json is defined
+  
+- name: reset var _api_command
+  set_fact:
+    _api_command: ""
+
+
+
+
+
+
+
+# CMS/MGMT
+- name: AUTO-TLS TEMP FIX
+  block:
+    - name: AUTO-TLS TEMP FIX
+      shell: |
+        JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac)))) 
+
+        # temp fix
+        # http://magicmonster.com/kb/prg/java/ssl/pkix_path_building_failed.html
+
+        openssl s_client -showcerts -connect `hostname -f`:7183 < /dev/null | openssl x509 -outform DER > example.der
+        keytool -import -trustcacerts -noprompt -alias example -storepass changeit -keystore  $JAVA_HOME/jre/lib/security/cacerts -file example.der
+      register: _out
+
+    - debug: var=_out
+  when: cdpdc.cm.auto_tls
+
+- name: check if MGMT is already installed
+  uri:
+    url: "{{ _cm_api_url }}/cm/service"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    status_code:
+      - 200
+      - 404
+    validate_certs: no
+  register: _mgmt
+
+- name: install MGMT/CMS
+  uri:
+    url: "{{ _cm_api_url }}/cm/service"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    method: PUT
+    body_format: json
+    body: "{{ cdpdc.cm.service }}"
+    validate_certs: no
+  when: _mgmt.json.type is not defined
+
+- name: check status of MGMT/CMS
+  uri:
+    url: "{{ _cm_api_url }}/cm/service"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _mgmt
+
+- name: start MGMT/CMS
+  uri:
+    url: "{{ _cm_api_url }}/cm/service/commands/restart"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    method: POST
+    validate_certs: no
+  when: _mgmt.json.serviceState != "STARTED" 
+  register: _api_command
+
+- name: check until _api_command exits
+  uri:
+    url: "{{ _cm_api_url }}/commands/{{ _api_command.json.id }}"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _api_command
+  until: not _api_command.json.active 
+  retries: 120
+  delay: 10
+  failed_when: _api_command.json.success is defined and not _api_command.json.success
+  when: _api_command.json is defined
+
+- name: reset var _api_command
+  set_fact:
+    _api_command: ""
+
+
+
+
+
+
+# IMPORT TEMPLATE
+# get list of current clusters
+- name: get cluster list
+  uri:
+    url: "{{ _cm_api_url }}/clusters"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _clusters
+
+- name: import template
+  uri:
+    url: "{{ _cm_api_url }}/cm/importClusterTemplate?addRepositories=true"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    method: POST
+    body_format: json
+    body: "{{ cdpdc.cluster_template }}"
+    validate_certs: no
+  register: _api_command
+  when: cdpdc.cluster_template.displayName not in (_clusters | json_query('json.items[*].displayName'))
+
+- name: check until _api_command exits
+  uri:
+    url: "{{ _cm_api_url }}/commands/{{ _api_command.json.id }}"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _api_command
+  until: not _api_command.json.active 
+  retries: 240
+  delay: 30
+  failed_when: _api_command.json.success is defined and not _api_command.json.success
+  when: _api_command.json is defined
+
+- name: reset var _api_command
+  set_fact:
+    _api_command: ""
+
+
+
+
+
+
+
+
+
+
+# for some reason, CMS needs to be restarted..
+- name: check status of MGMT/CMS
+  uri:
+    url: "{{ _cm_api_url }}/cm/service"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _mgmt
+
+- name: start MGMT/CMS
+  uri:
+    url: "{{ _cm_api_url }}/cm/service/commands/restart"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    method: POST
+    validate_certs: no
+  when: _mgmt.json.configStalenessStatus in ("STALE_REFRESHABLE", "STALE") or  _mgmt.json.clientConfigStalenessStatus in ("STALE_REFRESHABLE", "STALE")
+  register: _api_command
+
+- name: check until _api_command exits
+  uri:
+    url: "{{ _cm_api_url }}/commands/{{ _api_command.json.id }}"
+    user: "{{ cdpdc.cm.user }}"
+    password: "{{ cdpdc.cm.pass }}"
+    validate_certs: no
+  register: _api_command
+  until: not _api_command.json.active 
+  retries: 120
+  delay: 10
+  failed_when: _api_command.json.success is defined and not _api_command.json.success
+  when: _api_command.json is defined
+
+- name: reset var _api_command
+  set_fact:
+    _api_command: ""

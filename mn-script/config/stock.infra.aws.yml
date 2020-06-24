@@ -1,0 +1,100 @@
+###################
+# INFRASTRUCTURE  #
+###################
+
+db:
+  type: mariadb
+  password: cloudera
+
+instances:
+  cloud: aws              # aws, azure, gcp, openstack (field cloud on OpenStack)
+
+  # defaults for all instance groups
+  region: <replace me> #provide AWS availability zone
+  subnet: <replace me> #provide subnet ID
+  security_group: <replace me> #provide security group ID
+  image: ami-02eac2c0129f6376b # CentOS-7 x86_64 #optional: replace with another AMI ID as this AMI is available only on us-east-1
+  user: centos
+  public_key_id: "{{ public_key }}"
+  bootstrap: ""
+  tags:
+    owner: <replace me>
+    enddate: <replace me>
+    project: <replace me>
+
+  instance_groups:
+    - inventory_group:
+        - main_master
+        - cm_server
+        - db_server
+        - krb5_server
+        - cdpdc
+      exact_count: 1
+      count_tag:
+        Name: "{{ cdpdc_teardown }}-Master"
+      instance_type: m5.4xlarge
+      public_ip: yes
+      volumes:
+        - name: /dev/sda1
+          type: gp2
+          size: 100
+          delete_on_termination: true
+      tags:
+        Name: "{{ cdpdc_teardown }}-Master"
+        teardown: "{{ cdpdc_teardown }}"
+
+    - inventory_group:
+        - workers
+        - cdpdc
+      exact_count: 3
+      count_tag:
+        Name: "{{ cdpdc_teardown }}-Worker"
+      instance_type: m5.2xlarge
+      public_ip: yes
+      volumes:
+        - name: /dev/sda1
+          type: gp2
+          size: 100
+          delete_on_termination: true
+      tags:
+        Name: "{{ cdpdc_teardown }}-Worker"
+        teardown: "{{ cdpdc_teardown }}"
+
+    # - inventory_group:  
+    #     - cdsw_master
+    #     - cdpdc
+    #   exact_count: 1
+    #   count_tag:
+    #     Name: "{{ cdpdc_teardown }}-CDSW-Master"
+    #   instance_type: m5.4xlarge
+    #   public_ip: yes
+    #   volumes:
+    #     - name: /dev/sda1
+    #       type: gp2
+    #       size: 100
+    #       delete_on_termination: true
+    #     - name: /dev/sdb
+    #       type: gp2
+    #       size: 1000
+    #       delete_on_termination: true
+    #   tags:
+    #     Name: "{{ cdpdc_teardown }}-CDSW-Master"
+    #     teardown: "{{ cdpdc_teardown }}"
+
+
+    # - inventory_group: 
+    #     - cdf
+    #     - cdpdc
+    #   exact_count: 1
+    #   count_tag:
+    #     Name: "{{ cdpdc_teardown }}-CDF-Master"
+    #   instance_type: m5.2xlarge
+    #   public_ip: yes
+    #   volumes:
+    #     - name: /dev/sda1
+    #       type: gp2
+    #       size: 100
+    #       delete_on_termination: true
+    #   tags:
+    #     Name: "{{ cdpdc_teardown }}-CDF-Master"
+    #     teardown: "{{ cdpdc_teardown }}"

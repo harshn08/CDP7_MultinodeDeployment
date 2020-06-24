@@ -1,0 +1,40 @@
+---
+- name: Run os_family specific tasks
+  include_tasks: "{{ ansible_facts.os_family | lower }}.yml"
+
+
+# Install required libs for ansible modules mysql_user and mysql_db
+- name: install PyMySQL
+  pip:
+    name: PyMySQL
+
+
+# Secure MariaDB in a idempotent way 
+# (as advised in ansible module 'mysql_user' website)
+- name: Set the root password
+  mysql_user: 
+    check_implicit_admin: yes
+    name: root 
+    password: "{{ _password }}"
+    host: localhost
+    state: present
+
+- name: create ~/.my.cnf to store login username/password
+  copy:
+    content: |
+      [client]
+      user=root
+      password={{ _password }}
+    dest: "~/.my.cnf"
+    mode: '0600'
+
+- name: Remove all anonymous users
+  mysql_user:
+    name: ''
+    host_all: yes
+    state: absent
+
+- name: Remove the test database
+  mysql_db: 
+    name: test
+    state: absent

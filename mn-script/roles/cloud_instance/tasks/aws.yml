@@ -1,0 +1,33 @@
+---
+
+# trick to map a dict to another dict
+- name: create volumes fact
+  set_fact:
+    _vol:
+      device_name: "{{ item.name }}"
+      volume_type: "{{ item.type }}"
+      volume_size: "{{ item.size }}"
+      delete_on_termination: "{{ item.delete_on_termination | default('True') }}"
+  loop: "{{ _grp.volumes}}"
+  register: _volumes
+
+- name: ensure EC2 instances are present
+  ec2:
+    region: "{{ _grp.region | default(_infra.region) }}"
+    group_id: "{{ _grp.security_group | default(_infra.security_group) }}"
+    instance_type: "{{ _grp.instance_type | default(_infra.instance_type) }}"
+    image: "{{ _grp.image | default(_infra.image) }}"
+    key_name: "{{ _grp.public_key_id | default(_infra.public_key_id) }}"
+    exact_count: "{{ _grp.exact_count }}"
+    count_tag: "{{ _grp.count_tag }}"
+    user_data: "{{ _grp.bootstrap | default(_infra.bootstrap) }}"
+    assign_public_ip: "{{ _grp.public_ip | default(_infra.public_ip) }}"
+    vpc_subnet_id: "{{ _grp.subnet | default(_infra.subnet) }}"
+    instance_tags: "{{ _grp.tags | combine(_infra.tags) }}"
+    volumes: "{{ _volumes.results | map(attribute='ansible_facts._vol') | list }}"
+    monitoring: no
+    wait: true   
+
+
+
+

@@ -1,0 +1,4 @@
+---
+- name: Run db specific tasks
+  include_tasks: "{{ _type }}.yml"
+

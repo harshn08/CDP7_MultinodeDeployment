@@ -1,0 +1,36 @@
+---
+# Install MariaDB
+- name: create MariaDB repo
+  copy: 
+    content: |
+      [mariadb]
+      name = MariaDB
+      baseurl = http://yum.mariadb.org/10.1/centos7-amd64
+      gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
+      gpgcheck=1
+    dest: "/etc/yum.repos.d/MariaDB.repo"
+
+- name: Install MariaDB packages
+  yum:
+    name: 
+      - MariaDB-server 
+      - MariaDB-client
+      - epel-release
+    state: latest
+
+- name: Install python-pip 
+  yum:
+    name: 
+      - python-pip
+    state: latest
+    
+- name: Create MariaDB configuration file
+  template:
+    src: my.cnf.j2
+    dest: /etc/my.cnf
+
+- name: Start and enable MariaDB
+  systemd:
+    name: mariadb
+    state: started
+    enabled: yes

@@ -1,0 +1,371 @@
+---
+- name: Create a directory if it does not exist
+  file:
+    path: /opt/cloudera/cem 
+    state: directory
+    mode: '0755'
+
+- name: Check that file CEM-1.0.0.0-centos7-tars-tarball.tar.gz exists
+  stat:
+    path: /opt/cloudera/cem/CEM-1.0.0.0-centos7-tars-tarball.tar.gz
+  register: _stat_result
+
+- name: download the tarball if not already downloaded
+  get_url:
+    url: https://archive.cloudera.com/CEM/centos7/1.x/updates/1.0.0.0/CEM-1.0.0.0-centos7-tars-tarball.tar.gz
+    dest: /opt/cloudera/cem/CEM-1.0.0.0-centos7-tars-tarball.tar.gz
+    group: root
+    owner: root
+    mode: '0755'
+  when: _stat_result.stat.exists == False 
+
+- name: unpack tarball
+  unarchive:
+    src: /opt/cloudera/cem/CEM-1.0.0.0-centos7-tars-tarball.tar.gz
+    dest: /opt/cloudera/cem 
+    remote_src: yes
+  
+- name: unpack sub-tarball efm
+  unarchive:
+    src: /opt/cloudera/cem/CEM/centos7/1.0.0.0-54/tars/efm/efm-1.0.0.1.0.0.0-54-bin.tar.gz
+    dest: /opt/cloudera/cem
+    remote_src: yes
+
+- name: unpack sub-tarball minifi
+  unarchive:
+    src: /opt/cloudera/cem/CEM/centos7/1.0.0.0-54/tars/minifi/minifi-0.6.0.1.0.0.0-54-bin.tar.gz
+    dest: /opt/cloudera/cem
+    remote_src: yes
+
+- name: unpack sub-tarballs minifi-toolkit
+  unarchive:
+    src: /opt/cloudera/cem/CEM/centos7/1.0.0.0-54/tars/minifi/minifi-toolkit-0.6.0.1.0.0.0-54-bin.tar.gz
+    dest: /opt/cloudera/cem
+    remote_src: yes
+
+- name: Create a symbolic link for efm
+  file:
+    src: /opt/cloudera/cem/efm-1.0.0.1.0.0.0-54
+    dest: /opt/cloudera/cem/efm
+    owner: root
+    group: root
+    state: link
+
+- name: Create a symbolic link for minifi
+  file:
+    src: /opt/cloudera/cem/minifi-0.6.0.1.0.0.0-54
+    dest: /opt/cloudera/cem/minifi
+    owner: root
+    group: root
+    state: link
+
+- name: Create a symbolic link for minifi-toolkit
+  file:
+    src: /opt/cloudera/cem/minifi-toolkit-0.6.0.1.0.0.0-54
+    dest: /opt/cloudera/cem/minifi-toolkit
+    owner: root
+    group: root
+    state: link
+
+- name: Create a symbolic link for efm.sh
+  file:
+    src: /opt/cloudera/cem/efm/bin/efm.sh
+    dest: /etc/init.d/efm
+    owner: root
+    group: root
+    state: link
+
+- name: Change file ownership, group
+  file:
+    path: "{{ item }}"
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+  loop:
+    - /opt/cloudera/cem/efm
+    - /opt/cloudera/cem/minifi
+    - /opt/cloudera/cem/minifi-toolkit
+
+
+- name: copy new efm.properties
+  copy:
+    content: |
+      #
+      # Apache NiFi - MiNiFi
+      # Copyright 2014-2018 The Apache Software Foundation
+      #
+      # Licensed to the Apache Software Foundation (ASF) under one or more
+      # contributor license agreements.  See the NOTICE file distributed with
+      # this work for additional information regarding copyright ownership.
+      # The ASF licenses this file to You under the Apache License, Version 2.0
+      # (the "License"); you may not use this file except in compliance with
+      # the License.  You may obtain a copy of the License at
+      #
+      #     http://www.apache.org/licenses/LICENSE-2.0
+      #
+      # Unless required by applicable law or agreed to in writing, software
+      # distributed under the License is distributed on an "AS IS" BASIS,
+      # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      # See the License for the specific language governing permissions and
+      # limitations under the License.
+      #
+
+      # Web Server Properties
+      #  address: the hostname or ip address of the interface to bind to; to bind to all, use 0.0.0.0
+      efm.server.address={{ efm_server_address }}
+      efm.server.port=10080
+      efm.server.servlet.contextPath=/efm
+
+      # Web Server TLS Properties
+      efm.server.ssl.enabled=false
+      efm.server.ssl.keyStore=./conf/keystore.jks
+      efm.server.ssl.keyStoreType=jks
+      efm.server.ssl.keyStorePassword=
+      efm.server.ssl.keyPassword=
+      efm.server.ssl.trustStore=./conf/truststore.jks
+      efm.server.ssl.trustStoreType=jks
+      efm.server.ssl.trustStorePassword=
+      efm.server.ssl.clientAuth=WANT
+
+      # User Authentication Properties
+      # authentication via TLS mutual auth with client certificates
+      efm.security.user.certificate.enabled=false
+      # authentication via Knox SSO token passed in a cookie header
+      efm.security.user.knox.enabled=false
+      efm.security.user.knox.url=
+      efm.security.user.knox.publicKey=
+      efm.security.user.knox.cookieName=
+      efm.security.user.knox.audiences=
+      # authentication via generic reverse proxy with user passed in a header
+      efm.security.user.proxy.enabled=false
+      efm.security.user.proxy.headerName=x-webauth-user
+      #efm.security.user.proxy.ipWhitelist=
+      #efm.security.user.proxy.dnWhitelist[0]=
+
+      # NiFi Registry Properties
+      #  url: the base URL of a NiFi Registry instance
+      #  bucket: Only set one of bucketId OR bucketName
+      #  flowRefreshInterval: specify value and units (d=days, h=hours, m=minutes, s=seconds, ms=milliseconds)
+      efm.nifi.registry.enabled=true
+      efm.nifi.registry.url=http://{{ efm_nifi_registry_url_host }}:18080
+      efm.nifi.registry.bucketId=
+      efm.nifi.registry.bucketName=IoT
+      efm.nifi.registry.flowRefreshInterval=60s
+
+      # Database Properties
+      efm.db.url=jdbc:mysql://{{ efm_db_url_host }}:3306/efm
+      efm.db.driverClass=com.mysql.jdbc.Driver
+      efm.db.username=efm
+      efm.db.password=cloudera
+      efm.db.maxConnections=5
+      efm.db.sqlDebug=false
+
+      # Heartbeat Retention Properties
+      # For maxAgeToKeep, specify value and units (d=days, h=hours, m=minutes, s=seconds, ms=milliseconds)
+      # maxCountToKeep is an integer value that is applied per agentId
+      # Set to 0 to disable persisting events entirely
+      # Set no value to disable auto-cleanup (manual deletion only)
+      efm.heartbeat.cleanupInterval=60s
+      efm.heartbeat.metadata.maxAgeToKeep=1h
+      efm.heartbeat.metadata.maxCountToKeep=
+      efm.heartbeat.content.maxAgeToKeep=1m
+      efm.heartbeat.content.maxCountToKeep=
+
+      # Event Retention Properties
+      # Specify value and units (d=days, h=hours, m=minutes, s=seconds, ms=milliseconds)
+      # Set to 0 to disable persisting events entirely
+      # Set no value to disable auto-cleanup (manual deletion only)
+      efm.event.cleanupInterval=30s
+      efm.event.maxAgeToKeep.debug=1m
+      efm.event.maxAgeToKeep.info=1h
+      efm.event.maxAgeToKeep.warn=1d
+      efm.event.maxAgeToKeep.error=7d
+
+      # Agent Class Flow Monitor Properties
+      # Specify value and units (d=days, h=hours, m=minutes, s=seconds, ms=milliseconds)
+      efm.agent-class-monitor.interval=15s
+
+      # Metrics Properties
+      management.metrics.export.simple.enabled=false
+      management.metrics.export.prometheus.enabled=false
+      management.metrics.enable.efm.heartbeat=true
+      management.metrics.enable.efm.agentStatus=true
+      management.metrics.enable.efm.flowStatus=true
+      management.metrics.enable.efm.repo=true
+      management.metrics.efm.enable-tag.efmHost=true
+      management.metrics.efm.enable-tag.agentClass=true
+      management.metrics.efm.enable-tag.agentManifestId=true
+      management.metrics.efm.enable-tag.agentId=true
+      management.metrics.efm.enable-tag.deviceId=false
+      management.metrics.efm.enable-tag.flowId=true
+      management.metrics.efm.max-tags.agentClass=100
+      management.metrics.efm.max-tags.agentManifestId=10
+      management.metrics.efm.max-tags.agentId=10
+      management.metrics.efm.max-tags.deviceId=10
+      management.metrics.efm.max-tags.flowId=10
+
+      # External Metrics Dashboard Properties
+      #   base-url: optionally set a base url to use as the base for all other dashboard urls.
+      #               if blank, efm server base url is used (with proxy url rewriting rules as well)
+      #   url.*: url for a given dashboard type:
+      #            leave blank (or absent) do disable linking to that dashboard.
+      #            use relative url to inherit from base-url property.
+      #            use absolute url to override base-url for that dashboard type.
+      #            can use the following placeholders: {agentId}, {agentClass}, {flowId}
+      #efm.dashboard.base-url=http://localhost:3000
+      #efm.dashboard.url.agentclass=/d/efm-agent-class/?var-agentClass={agentClass}
+      #efm.dashboard.url.agent=/d/efm-agent/?var-agentId={agentId}
+      #efm.dashboard.url.flow=/d/efm-flow/?var-flowId={flowId}
+
+      # EL Specification Properties
+      efm.el.specifications.dir=./specs
+
+      # Logging Properties
+      #  logging.level.{logger-name}={DEBUG|INFO|WARN|ERROR}
+      logging.level.com.cloudera.cem.efm=INFO
+      #logging.path=
+      #logging.file=efm-app.log
+      #logging.file.max-size=10MB
+      #logging.file.max-history=10
+    dest: /opt/cloudera/cem/efm/conf/efm.properties
+
+- name: copy new bootstrap.conf
+  copy:
+    content: |
+      #
+      # Licensed to the Apache Software Foundation (ASF) under one or more
+      # contributor license agreements.  See the NOTICE file distributed with
+      # this work for additional information regarding copyright ownership.
+      # The ASF licenses this file to You under the Apache License, Version 2.0
+      # (the "License"); you may not use this file except in compliance with
+      # the License.  You may obtain a copy of the License at
+      #
+      #   http://www.apache.org/licenses/LICENSE-2.0
+      #
+      # Unless required by applicable law or agreed to in writing, software
+      # distributed under the License is distributed on an "AS IS" BASIS,
+      # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      # See the License for the specific language governing permissions and
+      # limitations under the License.
+      #
+
+      # Java command to use when running MiNiFi
+      java=java
+
+      # Username to use when running MiNiFi. This value will be ignored on Windows.
+      run.as=
+
+      # Configure where MiNiFi's lib and conf directories live
+      # When running as a Windows service set full paths instead of relative paths
+      lib.dir=./lib
+      conf.dir=./conf
+
+      # How long to wait after telling MiNiFi to shutdown before explicitly killing the Process
+      graceful.shutdown.seconds=20
+
+      # The location for the configuration file
+      # When running as a Windows service use the full path to the file
+      nifi.minifi.config=./conf/config.yml
+
+
+      # MiNiFi Command & Control Configuration
+      nifi.c2.enable=true
+      nifi.c2.rest.url=http://{{ nifi_c2_rest_url_host }}:10080/efm/api/c2-protocol/heartbeat
+      nifi.c2.rest.url.ack=http://{{ nifi_c2_rest_url_ack_host }}:10080/efm/api/c2-protocol/acknowledge
+      nifi.c2.agent.heartbeat.period=10000
+      nifi.c2.agent.class=iot-1
+      nifi.c2.agent.identifier=agent-iot-1
+
+      ## Define TLS security properties for C2 communications
+      #nifi.c2.security.truststore.location=
+      #nifi.c2.security.truststore.password=
+      #nifi.c2.security.truststore.type=JKS
+      #nifi.c2.security.keystore.location=
+      #nifi.c2.security.keystore.password=
+      #nifi.c2.security.keystore.type=JKS
+      #nifi.c2.security.need.client.auth=true
+
+      # Notifiers to use for the associated agent, comma separated list of class names
+      #nifi.minifi.notifier.ingestors=org.apache.nifi.minifi.bootstrap.configuration.ingestors.FileChangeIngestor
+      #nifi.minifi.notifier.ingestors=org.apache.nifi.minifi.bootstrap.configuration.ingestors.RestChangeIngestor
+      #nifi.minifi.notifier.ingestors=org.apache.nifi.minifi.bootstrap.configuration.ingestors.PullHttpChangeIngestor
+
+      # File change notifier configuration
+
+      # Path of the file to monitor for changes.  When these occur, the FileChangeNotifier, if configured, will begin the configuration reloading process
+      #nifi.minifi.notifier.ingestors.file.config.path=
+      # How frequently the file specified by 'nifi.minifi.notifier.file.config.path' should be evaluated for changes.
+      #nifi.minifi.notifier.ingestors.file.polling.period.seconds=5
+
+      # Rest change notifier configuration
+
+      # Port on which the Jetty server will bind to, keep commented for a random open port
+      #nifi.minifi.notifier.ingestors.receive.http.port=8338
+
+      #Pull HTTP change notifier configuration
+
+      # Hostname on which to pull configurations from
+      #nifi.minifi.notifier.ingestors.pull.http.hostname=localhost
+      # Port on which to pull configurations from
+      #nifi.minifi.notifier.ingestors.pull.http.port=4567
+      # Path to pull configurations from
+      #nifi.minifi.notifier.ingestors.pull.http.path=/c2/config
+      # Query string to pull configurations with
+      #nifi.minifi.notifier.ingestors.pull.http.query=class=raspi3
+      # Period on which to pull configurations from, defaults to 5 minutes if commented out
+      #nifi.minifi.notifier.ingestors.pull.http.period.ms=300000
+
+      # Periodic Status Reporters to use for the associated agent, comma separated list of class names
+      #nifi.minifi.status.reporter.components=org.apache.nifi.minifi.bootstrap.status.reporters.StatusLogger
+
+      # Periodic Status Logger configuration
+
+      # The FlowStatus query to submit to the MiNiFi instance
+      #nifi.minifi.status.reporter.log.query=instance:health,bulletins
+      # The log level at which the status will be logged
+      #nifi.minifi.status.reporter.log.level=INFO
+      # The period (in milliseconds) at which to log the status
+      #nifi.minifi.status.reporter.log.period=60000
+
+      # Disable JSR 199 so that we can use JSP's without running a JDK
+      java.arg.1=-Dorg.apache.jasper.compiler.disablejsr199=true
+
+      # JVM memory settings
+      java.arg.2=-Xms512m
+      java.arg.3=-Xmx512m
+
+      # Enable Remote Debugging
+      #java.arg.debug=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8000
+
+      java.arg.4=-Djava.net.preferIPv4Stack=true
+
+      # allowRestrictedHeaders is required for Cluster/Node communications to work properly
+      java.arg.5=-Dsun.net.http.allowRestrictedHeaders=true
+      java.arg.6=-Djava.protocol.handler.pkgs=sun.net.www.protocol
+
+      # Sets the provider of SecureRandom to /dev/urandom to prevent blocking on VMs
+      java.arg.7=-Djava.security.egd=file:/dev/urandom
+
+
+      # The G1GC is still considered experimental but has proven to be very advantageous in providing great
+      # performance without significant "stop-the-world" delays.
+      #java.arg.13=-XX:+UseG1GC
+
+      #Set headless mode by default
+      java.arg.14=-Djava.awt.headless=true
+    dest: /opt/cloudera/cem/minifi/conf/bootstrap.conf
+
+- name: install minifi
+  shell: |
+    /opt/cloudera/cem/minifi/bin/minifi.sh install
+    
+- name: start efm
+  shell: |
+    service efm start
+
+- name: start minifi
+  shell: |
+    service minifi start
+    
+

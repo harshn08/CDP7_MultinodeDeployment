@@ -1,0 +1,62 @@
+---
+- name: PROVISION HOSTS AND BUILD ANSIBLE HOSTS INVENTORY
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - include_vars: "{{ infra }}"
+
+    - name: ensure presence of instances and Ansible inventory
+      include_role:
+        name: cloud_instance
+      vars:
+        _infra: "{{ instances }}"
+        cdpdc_teardown: fabio.ghirardello.20200108
+
+    - name: print Ansible inventory for reference
+      debug:
+        msg:
+          - "PRINT HOSTVARS"
+          - "{{ hostvars }}"
+
+- name: INSTALL RDBMS
+  hosts: db_server
+  become: yes
+  tasks:
+    - include_vars: "{{ infra }}"
+
+    - name: install RDBMS
+      include_role:
+        name: install_{{ db.type }}
+      vars:
+        _password: "{{ db.password }}"
+
+- name: INSTALL MIT KDC CLIENT
+  hosts: cdpdc
+  become: yes
+  tasks:
+    - include_vars: "{{ vault }}"
+    - include_vars: "{{ cluster }}" # should put on separate file?
+
+    - name: install MIT KDC client
+      include_role:
+        name: install_krb5/client
+      when: cdpdc.cm.kerberized
+
+- name: INSTALL MIT KDC SERVER
+  hosts: krb5_server
+  become: yes
+  tasks:
+    - include_vars: "{{ vault }}"
+    - include_vars: "{{ cluster }}"  # should put on separate file? 
+
+    - name: install MIT KDC server
+      include_role:
+        name: install_krb5/server
+
+- name: PROVISION A CDP-DC CLUSTER
+  import_playbook: cdp-dc.yml
+  vars:
+    infra: "{{ infra }}"
+    cluster: "{{ cluster }}"
+    vault: "{{ vault }}"

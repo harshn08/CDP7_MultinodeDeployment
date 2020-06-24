@@ -1,0 +1,18 @@
+---
+
+- name: Ensure provisioning of a set of instances
+  include_tasks: "{{ _infra.cloud }}.yml"
+  loop: "{{ _infra.instance_groups }}"
+  loop_control:
+    loop_var: _grp
+
+- name: pause 3 seconds
+  pause: 
+    seconds: 3  
+
+- name: put instances into Ansible inventory groups
+  include_tasks: "{{ _infra.cloud }}.groups.yml"
+  loop: "{{ _infra.instance_groups }}"
+  loop_control:
+    loop_var: _grp
+

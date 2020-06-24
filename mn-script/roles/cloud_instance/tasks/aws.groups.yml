@@ -1,0 +1,38 @@
+---
+# bacause exact_count and count_tag is used
+# the ec2 module might also delete instances.
+# If it deletes an instance, the registered variable will hold the info
+# of the terminated instances and wait_for will fail.
+# Therefore, at the cost of being slow, let module ec2 create/delete instances
+# and have ec2_instance_info gather the details of the current instances.
+- name: pull info re ec2 instances
+  ec2_instance_facts:
+    region: "{{ _grp.region | default(_infra.region) }}"
+    filters:
+      # TODO: these tags are hardcoded - should be the count_tags
+      "tag:Name": "{{ _grp.tags.Name }}"
+      instance-state-name: [ "running" ]
+  register: _ec2
+
+- name: Wait for SSH to come up
+  wait_for:
+    host: "{{ item.public_ip_address }}"
+    port: 22 
+    timeout: 180
+    sleep: 5
+    state: started 
+  loop: "{{ _ec2.instances }}"
+
+- name: add instances to inventory groups
+  add_host:
+    name: "{{ item.public_ip_address }}"
+    groups: "{{ _grp.inventory_group }}"
+    ansible_host: "{{ item.public_ip_address }}"
+    #ansible_private_key_file: '{{ _infra.private_key_path }}'
+    ansible_user: "{{ _grp.user | default(_infra.user) }}"
+    #
+    public_hostname:  "{{ item.public_dns_name }}"
+    public_ip:        "{{ item.public_ip_address }}"
+    private_hostname: "{{ item.private_dns_name }}"
+    private_ip:       "{{ item.private_ip_address }}"
+  loop: "{{ _ec2.instances }}"

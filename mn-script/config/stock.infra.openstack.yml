@@ -1,0 +1,112 @@
+###################
+# INFRASTRUCTURE  #
+###################
+
+db:
+  type: mariadb
+  password: cloudera
+
+
+instances:
+  cloud: openstack              # aws, azure, gcp, openstack (field cloud on OpenStack)
+  user: centos
+
+  # defaults for all instance groups
+  interface: internal
+  az: SE
+  subnet: "PROVIDER_NET_172.26.192.0/18"
+  region: RegionOne
+  security_group: 
+    - default
+  public_key_id: "{{ public_key }}" 
+  image: "CentOS 7.4"
+  # volume_size:       100 
+  domain: field.hortonworks.com
+  bootstrap: ""
+  tags:
+    owner: fabio.ghirardello
+    enddate: "01312020"
+    project: fabio-ansible-test
+ 
+  
+  instance_groups:
+    - inventory_group: 
+        - main_master
+        - masters
+        - workers
+        - cm_server
+        - db_server
+        - krb5_server
+        - cdpdc
+      exact_count: 1
+      instance_type: m3.2xlarge
+      # public_ip: yes
+      # volumes:
+      #   - name: /dev/sda1
+      #     type: gp2
+      #     size: 100
+      #     delete_on_termination: true
+      tags:
+        Name: "{{ cdpdc_teardown }}-MainMaster"
+        teardown: "{{ cdpdc_teardown }}"
+    
+    - inventory_group: 
+        - main_worker
+        - workers
+        - cdpdc
+      exact_count: 1
+      instance_type: m3.xlarge
+      # public_ip: yes
+      # volumes:
+      #   - name: /dev/sda1
+      #     type: gp2
+      #     size: 100
+      #     delete_on_termination: true
+      tags:
+        Name: "{{ cdpdc_teardown }}-Workers"
+        teardown: "{{ cdpdc_teardown }}"
+    
+    - inventory_group:  
+        - cdsw_master
+        - cdpdc
+      exact_count: 1
+      instance_type: m3.4xlarge
+      # public_ip: yes
+      # volumes:
+      #   - name: /dev/sda1
+      #     type: gp2
+      #     size: 100
+      #     delete_on_termination: true
+      #   - name: /dev/sdb
+      #     type: gp2
+      #     size: 1000
+      #     delete_on_termination: true
+      bootstrap: |
+        #!/bin/bash
+        dd if=/dev/zero of=/root/diskimage bs=1M count=51200 
+        mkfs.ext4 -F /root/diskimage 
+        losetup -d /dev/loop0
+        sleep 10
+        losetup /dev/loop0 /root/diskimage 
+        mkdir /mnt/mymountpoint 
+        mount -o loop=/dev/loop0 /root/diskimage /mnt/mymountpoint 
+        losetup /dev/loop0 /root/diskimage 
+      tags:
+        Name: "{{ cdpdc_teardown }}-CDSWMaster"
+        teardown: "{{ cdpdc_teardown }}"
+
+    - inventory_group: 
+        - cdf
+        - cdpdc
+      exact_count: 1
+      instance_type: m3.xlarge
+      # public_ip: yes
+      # volumes:
+      #   - name: /dev/sda1
+      #     type: gp2
+      #     size: 100
+      #     delete_on_termination: true
+      tags:
+        Name: "{{ cdpdc_teardown }}-CDF"
+        teardown: "{{ cdpdc_teardown }}"
+
