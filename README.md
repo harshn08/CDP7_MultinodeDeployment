@@ -207,14 +207,6 @@ The home directory should be accessible via docker mapping of the folders.
 		[local]
 		localhost
 	
- 7. For Auto_TLS, you will need a CDP DC license file from cloudera.
-
-	Specify the path to that file as indicated below, wherever it says <replace me> 
- 	
-		 licence:
-	      	   type: enterprise
-	           filepath: <replace me> #/test_2019_2020_Licenseinfo/test_2019_2020_cloudera_license.txt
- 
 
 Now are ready to execute the ansible playbook from mn-script folder.
 
