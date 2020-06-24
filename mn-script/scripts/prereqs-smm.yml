@@ -1,0 +1,20 @@
+---
+- name: SMM install libs
+  yum:
+    name:
+      - gcc-c++ 
+      - make
+    state: latest
+
+- name: SMM run script
+  shell: |
+    curl -sL https://rpm.nodesource.com/setup_10.x | sudo -E bash - 
+
+- name: SMM install nodejs
+  yum:
+    name: nodejs
+    state: latest
+
+- name: SMM install npn libs
+  shell: |
+    npm install forever -g 

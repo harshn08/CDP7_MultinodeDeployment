@@ -1,0 +1,882 @@
+##################
+# CDP DEPLOYMENT #
+##################
+
+# THE KRB VARS ARE HERE FOR CONVENIENCE, SHOULD BE IN SEPARATE FILE
+krb5_realm: CLOUDERA.LOCAL
+krb5_kdc_type: MIT KDC
+krb5_kdc_host: "{{ hostvars[groups.krb5_server[0]].private_hostname }}"
+krb5_kdc_admin_user: "cloudera-scm/admin@{{ krb5_realm }}"
+krb5_kdc_admin_passwd: Cloudera20!
+krb5_kdc_master_passwd: Cloudera20!
+krb5_enc_types: aes256-cts
+
+
+# DON"T FORGET TO UPDATE THIS!!
+cdsw_docker_devices_config: "/dev/nvme1n1"
+
+cdpdc:
+  # in vault file
+  private_key: "{{ replace_key }}"
+
+  cm:
+    protocol: https
+    host: localhost
+    port: 7183
+    path: /api/v40
+    user: admin
+    pass: admin
+
+    repo_file: "https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cm7/7.1.1/redhat7/yum/cloudera-manager-trial.repo"
+    repo_url: "https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cm7/7.1.1"
+
+    license:
+      type: enterprise
+      filepath: <replace me>  # for eg: /test_2019_2020_Licenseinfo/test_2019_2020_cloudera_license.txt
+
+    auto_tls: yes
+    kerberized: yes
+    cdsw_jar_with_fix_for_cr7: no # allows cdsw 1.6.1 to be installed on CR 7.0.3
+
+    db:
+      type: mysql
+      list:
+        - name: scm
+          user: scm
+          pass: cloudera
+        - name: amon
+          user: amon
+          pass: cloudera
+        - name: rman
+          user: rman
+          pass: cloudera
+        - name: metastore
+          user: hive
+          pass: cloudera
+        - name: hue
+          user: hue
+          pass: cloudera
+        - name: oozie
+          user: oozie
+          pass: cloudera
+        - name: efm
+          user: efm
+          pass: cloudera
+        - name: nifireg
+          user: nifireg
+          pass: cloudera
+        - name: registry
+          user: registry
+          pass: cloudera
+        - name: streamsmsgmgr
+          user: streamsmsgmgr
+          pass: cloudera
+        - name: ranger
+          user: ranger
+          pass: cloudera
+
+    csds: []
+ 
+    local_csds: []
+
+    local_parcels: []
+
+    config:
+      - name: KDC_HOST
+        value: "{{ hostvars[groups.krb5_server[0]].private_hostname }}"
+      - name: KDC_ADMIN_HOST
+        value: "{{ hostvars[groups.krb5_server[0]].private_hostname }}"
+      - name: KDC_TYPE
+        value: MIT KDC
+      - name: KRB_ENC_TYPES
+        value: aes256-cts aes128-cts rc4-hmac
+      - name: SECURITY_REALM
+        value: CLOUDERA.LOCAL
+      - name: KRB_MANAGE_KRB5_CONF
+        value: "true"
+
+    service:
+      roles:
+        - type: SERVICEMONITOR
+        - type: HOSTMONITOR
+        - type: EVENTSERVER
+        - type: ALERTPUBLISHER
+      displayName: CMS
+
+  cluster_template:
+    cdhVersion: 7.1.1
+    cmVersion: 7.1.1
+    displayName: StockClusterKRB
+    hostTemplates:
+      - refName: main_master_template
+        cardinality: 1
+        roleConfigGroupsRefNames:
+          - atlas-ATLAS_SERVER-BASE
+          - hbase-MASTER-BASE
+          - hdfs-BALANCER-BASE
+          - hdfs-NAMENODE-BASE
+          - hdfs-SECONDARYNAMENODE-BASE
+          - hive-GATEWAY-BASE
+          - hive-HIVEMETASTORE-BASE
+          - hive_on_tez-HIVESERVER2-BASE
+          - hue-HUE_LOAD_BALANCER-BASE
+          - hue-HUE_SERVER-BASE
+          - hue-KT_RENEWER-BASE
+          - impala-CATALOGSERVER-BASE
+          - impala-STATESTORE-BASE
+          - knox-KNOX-GATEWAY-BASE
+          - kafka-KAFKA_BROKER-BASE
+          - kms-KMS-BASE
+          - kudu-KUDU_MASTER-BASE
+          - oozie-OOZIE_SERVER-BASE
+          - phoenix-PHOENIX_QUERY_SERVER-BASE
+          - ranger-RANGER_ADMIN-BASE
+          - ranger-RANGER_TAGSYNC-BASE
+          - ranger-RANGER_USERSYNC-BASE
+          - solr-SOLR_SERVER-BASE
+          - spark_on_yarn-GATEWAY-BASE
+          - spark_on_yarn-SPARK_YARN_HISTORY_SERVER-BASE
+          - tez-GATEWAY-BASE
+          - yarn-JOBHISTORY-BASE
+          - yarn-RESOURCEMANAGER-BASE
+          - zookeeper-SERVER-BASE
+
+      - refName: worker_template
+        cardinality: 3
+        roleConfigGroupsRefNames:
+          - hbase-REGIONSERVER-BASE
+          - hdfs-DATANODE-BASE
+          - hive-GATEWAY-BASE
+          - impala-IMPALAD-BASE
+          - kudu-KUDU_TSERVER-BASE
+          - spark_on_yarn-GATEWAY-BASE
+          - yarn-NODEMANAGER-BASE
+          - zookeeper-SERVER-BASE
+
+    instantiator:
+      clusterName: StockClusterKRB
+      hosts:
+        - hostName: "{{ hostvars[groups.main_master[0]].private_hostname }}"
+          hostTemplateRefName: main_master_template
+
+        #- hostName: "{{ hostvars[groups.cdf[0]].private_hostname }}"
+        #  hostTemplateRefName: cdf_template
+
+        #- hostName: "{{ hostvars[groups.cdsw_master[0]].private_hostname }}"
+        #  hostTemplateRefName: cdsw_template
+
+        - hostNameRange: "{{ hostvars[groups.workers[0]].private_hostname }}, {{ hostvars[groups.workers[1]].private_hostname }}, {{ hostvars[groups.workers[2]].private_hostname }}"
+          hostTemplateRefName: worker_template
+
+      variables:
+        - name: atlas-ATLAS_SERVER-BASE-atlas_admin_password
+          value: BadPass#1
+        - name: hive-hive_metastore_database_host
+          value: "{{ hostvars[groups.db_server[0]].private_hostname }}"
+        - name: hive-hive_metastore_database_password
+          value: cloudera
+        - name: hue-database_host
+          value: "{{ hostvars[groups.db_server[0]].private_hostname }}"
+        - name: hue-database_password
+          value: cloudera
+        - name: hue-database_type
+          value: mysql
+        - name: knox-KNOX_GATEWAY-BASE-gateway_master_secret
+          value: BadPass#1 
+        - name: kudu-KUDU_MASTER-BASE-fs_data_dirs
+          value: "/kudu/mdir"
+        - name: kudu-KUDU_MASTER-BASE-fs_wal_dir
+          value: "/kudu/mwal"
+        - name: kudu-KUDU_TSERVER-BASE-fs_data_dirs
+          value: "/kudu/tdir"
+        - name: kudu-KUDU_TSERVER-BASE-fs_wal_dir
+          value: "/kudu/twal"
+        - name: nifitoolkitca-nifi.toolkit.tls.ca.server.token
+          value: ClouderaNiFi_123
+        - name: oozie-OOZIE_SERVER-BASE-oozie_database_host
+          value: "{{ hostvars[groups.db_server[0]].private_hostname }}"
+        - name: oozie-OOZIE_SERVER-BASE-oozie_database_password
+          value: cloudera
+        - name: oozie-OOZIE_SERVER-BASE-oozie_database_type
+          value: mysql
+        - name: oozie-OOZIE_SERVER-BASE-oozie_database_user
+          value: oozie
+        - name: ranger-RANGER_ADMIN-BASE-ranger_database_password
+          value: cloudera
+        - name: ranger-keyadmin_user_password
+          value: BadPass#1
+        - name: ranger-rangeradmin_user_password
+          value: BadPass#1
+        - name: ranger-rangertagsync_user_password
+          value: BadPass#1
+        - name: ranger-rangerusersync_user_password
+          value: BadPass#1
+        - name: schemaregistry-SCHEMA_REGISTRY_SERVER-BASE-schema.registry.storage.connector.password
+          value: cloudera
+        - name: streams_messaging_manager-STREAMS_MESSAGING_MANAGER_SERVER-BASE-streams.messaging.manager.storage.connector.password
+          value: cloudera
+        - name: streams_messaging_manager-cm.metrics.password
+          value: admin
+
+    products:
+      - product: CDH
+        version: 7.1.1-1.cdh7.1.1.p0.3266817
+
+    repositories:
+      - https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cdh7/7.1.1.0/parcels/
+
+    services:
+      - refName: hive
+        serviceType: HIVE
+        serviceConfigs:
+          - name: hive_metastore_database_password
+            variable: hive-hive_metastore_database_password
+          - name: hive_metastore_database_host
+            variable: hive-hive_metastore_database_host
+        roleConfigGroups:
+          - refName: hive-GATEWAY-BASE
+            roleType: GATEWAY
+            base: true
+          - refName: hive-HIVEMETASTORE-BASE
+            roleType: HIVEMETASTORE
+            base: true
+      - refName: zookeeper
+        serviceType: ZOOKEEPER
+        serviceConfigs:
+          - name: enableSecurity
+            value: "true"
+          - name: quorum_auth_enable_sasl
+            value: "true"
+        roleConfigGroups:
+          - refName: zookeeper-SERVER-BASE
+            roleType: SERVER
+            base: true
+      - refName: atlas
+        serviceType: ATLAS
+        serviceConfigs:
+          - name: kerberos.auth.enable
+            value: "true"
+        roleConfigGroups:
+          - refName: atlas-ATLAS_SERVER-BASE
+            roleType: ATLAS_SERVER
+            configs:
+              - name: atlas_authentication_method_file
+                value: "true"
+              - name: atlas_admin_password
+                variable: atlas-ATLAS_SERVER-BASE-atlas_admin_password
+            base: true
+      - refName: hive_on_tez
+        serviceType: HIVE_ON_TEZ
+        roleConfigGroups:
+          - refName: hive_on_tez-HIVESERVER2-BASE
+            roleType: HIVESERVER2
+            base: true
+      - refName: knox
+        serviceType: KNOX
+        roleConfigGroups:
+          - refName: knox-KNOX-GATEWAY-BASE
+            roleType: KNOX_GATEWAY
+            configs:
+              - name: gateway_master_secret
+                variable: knox-KNOX_GATEWAY-BASE-gateway_master_secret
+            base: true
+      - refName: oozie
+        serviceType: OOZIE
+        roleConfigGroups:
+          - refName: oozie-OOZIE_SERVER-BASE
+            roleType: OOZIE_SERVER
+            configs:
+              - name: oozie_database_user
+                variable: oozie-OOZIE_SERVER-BASE-oozie_database_user
+              - name: oozie_database_host
+                variable: oozie-OOZIE_SERVER-BASE-oozie_database_host
+              - name: oozie_database_type
+                variable: oozie-OOZIE_SERVER-BASE-oozie_database_type
+              - name: oozie_database_password
+                variable: oozie-OOZIE_SERVER-BASE-oozie_database_password
+            base: true
+      - refName: ranger
+        serviceType: RANGER
+        serviceConfigs:
+          - name: rangeradmin_user_password
+            variable: ranger-rangeradmin_user_password
+          - name: rangertagsync_user_password
+            variable: ranger-rangertagsync_user_password
+          - name: rangerusersync_user_password
+            variable: ranger-rangerusersync_user_password
+          - name: keyadmin_user_password
+            variable: ranger-keyadmin_user_password
+          - name: ranger_database_host
+            value: 127.0.0.1
+          - name: ranger_database_user
+            value: ranger
+          - name: ranger_database_password
+            variable: ranger-RANGER_ADMIN-BASE-ranger_database_password
+        roleConfigGroups:
+          - refName: ranger-RANGER_USERSYNC-BASE
+            roleType: RANGER_USERSYNC
+            base: true
+          - refName: ranger-RANGER_TAGSYNC-BASE
+            roleType: RANGER_TAGSYNC
+            base: true
+          - refName: ranger-RANGER_ADMIN-BASE
+            roleType: RANGER_ADMIN
+            base: true
+      - refName: tez
+        serviceType: TEZ
+        roleConfigGroups:
+          - refName: tez-GATEWAY-BASE
+            roleType: GATEWAY
+            base: true
+      - refName: kudu
+        serviceType: KUDU
+        serviceConfigs:
+          - name: enable_security
+            value: "true"
+        roleConfigGroups:
+          - refName: kudu-KUDU_MASTER-BASE
+            roleType: KUDU_MASTER
+            configs:
+              - name: fs_wal_dir
+                variable: kudu-KUDU_MASTER-BASE-fs_wal_dir
+              - name: fs_data_dirs
+                variable: kudu-KUDU_MASTER-BASE-fs_data_dirs
+            base: true
+          - refName: kudu-KUDU_TSERVER-BASE
+            roleType: KUDU_TSERVER
+            configs:
+              - name: fs_wal_dir
+                variable: kudu-KUDU_TSERVER-BASE-fs_wal_dir
+              - name: fs_data_dirs
+                variable: kudu-KUDU_TSERVER-BASE-fs_data_dirs
+            base: true
+      - refName: impala
+        serviceType: IMPALA
+        serviceConfigs:
+          - name: ranger_service
+            ref: ranger
+          - name: kudu_service
+            ref: kudu
+          - name: hdfs_service
+            ref: hdfs
+          - name: hive_service
+            ref: hive
+          - name: atlas_service
+            ref: atlas
+          - name: hbase_service
+            ref: hbase
+        roleConfigGroups:
+          - refName: impala-IMPALAD-BASE
+            roleType: IMPALAD
+            base: true
+          - refName: impala-STATESTORE-BASE
+            roleType: STATESTORE
+            base: true
+          - refName: impala-CATALOGSERVER-BASE
+            roleType: CATALOGSERVER
+            base: true
+      - refName: phoenix
+        serviceType: PHOENIX
+        serviceConfigs:
+          - name: hdfs_service
+            ref: hdfs
+          - name: zookeeper_service
+            ref: zookeeper
+          - name: hbase_service
+            ref: hbase
+        roleConfigGroups:
+          - refName: phoenix-PHOENIX_QUERY_SERVER-BASE
+            roleType: PHOENIX_QUERY_SERVER
+            base: true
+      - refName: spark_on_yarn
+        serviceType: SPARK_ON_YARN
+        roleConfigGroups:
+          - refName: spark_on_yarn-SPARK_YARN_HISTORY_SERVER-BASE
+            roleType: SPARK_YARN_HISTORY_SERVER
+            base: true
+          - refName: spark_on_yarn-GATEWAY-BASE
+            roleType: GATEWAY
+            base: true
+      - refName: kafka
+        serviceType: KAFKA
+        serviceConfigs:
+          - name: producer.metrics.enable
+            value: "true"
+          - name: kerberos.auth.enable
+            value: "true"
+        roleConfigGroups:
+          - refName: kafka-KAFKA_BROKER-BASE
+            roleType: KAFKA_BROKER
+            base: true
+      - refName: solr
+        serviceType: SOLR
+        serviceConfigs:
+          - name: solr_security_authentication
+            value: kerberos
+        roleConfigGroups:
+          - refName: solr-SOLR_SERVER-BASE
+            roleType: SOLR_SERVER
+            base: true
+      - refName: hue
+        serviceType: HUE
+        serviceConfigs:
+          - name: database_type
+            variable: hue-database_type
+          - name: database_password
+            variable: hue-database_password
+          - name: database_host
+            variable: hue-database_host
+          - name: impala_service
+            ref: impala
+        roleConfigGroups:
+          - refName: hue-HUE_SERVER-BASE
+            roleType: HUE_SERVER
+            base: true
+          - refName: hue-KT_RENEWER-BASE
+            roleType: KT_RENEWER
+            base: true
+          - refName: hue-HUE_LOAD_BALANCER-BASE
+            roleType: HUE_LOAD_BALANCER
+            base: true
+      - refName: hdfs
+        serviceType: HDFS
+        serviceConfigs:
+          - name: hadoop_security_authentication
+            value: kerberos
+          - name: hadoop_secure_web_ui
+            value: "true"
+          - name: dfs_encrypt_data_transfer_algorithm
+            value: AES/CTR/NoPadding
+          - name: hadoop_security_authorization
+            value: "true"
+          - name: hdfs_verify_ec_with_topology_enabled
+            value: "false"
+          - name: kms_service
+            ref: kms
+        roleConfigGroups:
+          - refName: hdfs-NAMENODE-BASE
+            roleType: NAMENODE
+            base: true
+          - refName: hdfs-SECONDARYNAMENODE-BASE
+            roleType: SECONDARYNAMENODE
+            base: true
+          - refName: hdfs-DATANODE-BASE
+            roleType: DATANODE
+            configs:
+              - name: dfs_datanode_data_dir_perm
+                value: "700"
+              - name: dfs_datanode_port
+                value: "1004"
+              - name: dfs_datanode_http_port
+                value: "1006"
+            base: true
+          - refName: hdfs-BALANCER-BASE
+            roleType: BALANCER
+            base: true
+      - refName: yarn
+        serviceType: YARN
+        serviceConfigs:
+          - name: hadoop_secure_web_ui
+            value: "true"
+        roleConfigGroups:
+          - refName: yarn-RESOURCEMANAGER-BASE
+            roleType: RESOURCEMANAGER
+            base: true
+          - refName: yarn-NODEMANAGER-BASE
+            roleType: NODEMANAGER
+            base: true
+          - refName: yarn-JOBHISTORY-BASE
+            roleType: JOBHISTORY
+            base: true
+      - refName: hbase
+        serviceType: HBASE
+        serviceConfigs:
+          - name: hbase_security_authorization
+            value: "true"
+          - name: hbase_service_config_safety_valve
+            value:
+              "<property>\n<name>hbase.regionserver.wal.codec</name>\n \n<value>org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec</value>\n</property>
+              \n\n<property>\n<name>hbase.region.server.rpc.scheduler.factory.class</name>\n<value>org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory</value>\n
+              \ <description>Factory to create the Phoenix RPC Scheduler that uses separate
+              queues for index and metadata updates</description>\n</property>\n\n<property>\n
+              \ <name>hbase.rpc.controllerfactory.class</name>\n<value>org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory</value>\n
+              \ <description>Factory to create the Phoenix RPC Scheduler that uses separate
+              queues for index and metadata updates</description>\n</property>\n\n<property>\n
+              <name>phoenix.functions.allowUserDefinedFunctions</name>\n <value>true</value>\n
+              <description>enable UDF functions</description>\n</property>"
+          - name: zookeeper_service
+            ref: zookeeper
+          - name: hbase_thriftserver_security_authentication
+            value: auth-conf
+          - name: hdfs_service
+            ref: hdfs
+          - name: hbase_security_authentication
+            value: kerberos
+        roleConfigGroups:
+          - refName: hbase-REGIONSERVER-BASE
+            roleType: REGIONSERVER
+            configs:
+              - name: hbase_regionserver_java_heapsize
+                value: "524288000"
+            base: true
+          - refName: hbase-MASTER-BASE
+            roleType: MASTER
+            configs:
+              - name: hbase_master_java_heapsize
+                value: "524288000"
+            base: true
+      - refName: kms
+        serviceType: KMS
+        roleConfigGroups:
+          - refName: kms-KMS-BASE
+            roleType: KMS
+            configs:
+              - name: kms_http_port
+                value: "16060"
+              - name: kms-acls.xml_role_safety_valve
+                value: |
+                  <!--
+                    KMS ACLs control which users can perform various actions on the KMS,
+                    and which users and groups have access to which keys.
+
+                    This file has the following sections:
+                    * ACLs for KMS operations
+                    ** Access to specific KMS operations
+                    ** Blacklists for those specific operations
+                    * ACLs for keys
+                    ** Default ACLs for keys
+                    ** Whitelist ACLs for keys
+                    ** Key-specific ACLs
+                  -->
+
+                  <!--
+                    KMS ACLs that govern access to specific key operations. If access is not
+                    granted for an operation here, then the operation is forbidden, even if
+                    a key ACL allows it.
+
+                    The ACL value should be either a username or a username and group name
+                    separated by whitespace.
+
+                    An empty value for an ACL indicates that no user is granted access to that
+                    operation. A value of "*" (for the username or groupname) indicates that
+                    all users are granted access to that operation. Any operation for which
+                    there is no ACL will be treated as having an ACL with a value of "*".
+                  -->
+
+                  <property>
+                    <name>hadoop.kms.acl.CREATE</name>
+                    <value>admin admin</value>
+                    <description>
+                      ACL for create-key operations.
+                      If the user is not in the GET ACL, the key material is not returned
+                      as part of the response.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.acl.DELETE</name>
+                    <value>admin admin</value>
+                    <description>
+                      ACL for delete-key operations.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.acl.ROLLOVER</name>
+                    <value>admin admin</value>
+                    <description>
+                      ACL for rollover-key operations.
+                      If the user does is not in the GET ACL, the key material is not returned
+                      as part of the response.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.acl.GET</name>
+                    <value></value>
+                    <description>
+                      ACL for get-key-version and get-current-key operations.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.acl.GET_KEYS</name>
+                    <value>admin admin</value>
+                    <description>
+                      ACL for get-keys operations.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.acl.SET_KEY_MATERIAL</name>
+                    <value></value>
+                    <description>
+                      Complementary ACL for CREATE and ROLLOVER operations to allow the client
+                      to provide the key material when creating or rolling a key.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.acl.GENERATE_EEK</name>
+                    <value>hdfs supergroup</value>
+                    <description>
+                      ACL for generateEncryptedKey CryptoExtension operations.
+                    </description>
+                  </property>
+
+                  <!--
+                    KMS blacklists to prevent access to operations. These settings override the
+                    permissions granted by the KMS ACLs above.
+
+                    The blacklist value should be either a username or a username and group name
+                    separated by whitespace.
+
+                    A blank value indicates that no user is blacklisted from the operation. A
+                    value of "*" (for either the username or groupname) indicates that all users
+                    are blacklisted from the operation. Any operation for which there is no
+                    blacklist will be treated as having a blacklist with an empty value.
+                  -->
+
+                  <!--
+                    In this template the hdfs user is blacklisted for everything except
+                    GET_METADATA, GET_KEYS, and GENERATE_EEK. The GET and SET_KEY_MATERIAL
+                    operations are blacklisted for all users since Hadoop users should not
+                    need to perform those operations, and access to the key material should
+                    be as restricted as possible.
+                  -->
+
+                  <property>
+                    <name>hadoop.kms.blacklist.CREATE</name>
+                    <value>hdfs supergroup</value>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.blacklist.DELETE</name>
+                    <value>hdfs supergroup</value>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.blacklist.ROLLOVER</name>
+                    <value>hdfs supergroup</value>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.blacklist.GET</name>
+                    <value>*</value>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.blacklist.GET_KEYS</name>
+                    <value></value>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.blacklist.SET_KEY_MATERIAL</name>
+                    <value>*</value>
+                  </property>
+
+                  <property>
+                    <name>hadoop.kms.blacklist.DECRYPT_EEK</name>
+                    <value>hdfs supergroup</value>
+                  </property>
+
+
+                  <!--
+                    Default key ACLs that govern access to key operations for key-operation pairs
+                    that do not have a specific key ACL already. Specific key ACLs will override
+                    the default key ACLs
+
+                    The ACL value should be either a username or a username and group name
+                    separated by whitespace.
+
+                    An empty value for an ACL indicates that no user is granted access to that
+                    operation. A value of "*" (for the username or groupname) indicates that
+                    all users are granted access to that operation. Any operation for which
+                    there is no ACL will be treated as having an ACL with an empty value.
+                  -->
+
+                  <property>
+                    <name>default.key.acl.MANAGEMENT</name>
+                    <value></value>
+                    <description>
+                      Default ACL that grants access to the MANAGEMENT operation on all keys.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>default.key.acl.GENERATE_EEK</name>
+                    <value></value>
+                    <description>
+                      Default ACL that grants access to the GENERATE_EEK operation on all keys.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>default.key.acl.DECRYPT_EEK</name>
+                    <value></value>
+                    <description>
+                      Default ACL that grants access to the DECRYPT_EEK operation on all keys.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>default.key.acl.READ</name>
+                    <value></value>
+                    <description>
+                      Default ACL that grants access to the READ operation on all keys.
+                    </description>
+                  </property>
+
+                  <!--
+                    Whitelist key ACLs that grant access to specific key operations. Any
+                    permissions granted here will be added to whatever permissions are granted
+                    by the specific key ACL or the default key ACL. Note that these whitelist
+                    ACLs grant access to operations on specific keys. If the operations
+                    themselves are not allowed because of the KMS ACLs/blacklists, then the
+                    operation will not be permitted, regardless of the whitelist settings.
+
+                    The ACL value should be either a username or a username and group name
+                    separated by whitespace.
+
+                    An empty value for an ACL indicates that no user is granted access to that
+                    operation. A value of "*" (for the username or groupname) indicates that
+                    all users are granted access to that operation. Any operation for which
+                    there is no ACL will be treated as having an ACL with an empty value.
+                  -->
+
+                  <property>
+                    <name>whitelist.key.acl.MANAGEMENT</name>
+                    <value>admin admin</value>
+                    <description>
+                      Whitelist ACL for MANAGEMENT operations for all keys.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>whitelist.key.acl.READ</name>
+                    <value>hdfs supergroup</value>
+                    <description>
+                      Whitelist ACL for READ operations for all keys.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>whitelist.key.acl.GENERATE_EEK</name>
+                    <value>hdfs supergroup</value>
+                    <description>
+                      Whitelist ACL for GENERATE_EEK operations for all keys.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>whitelist.key.acl.DECRYPT_EEK</name>
+                    <value>admin admin</value>
+                    <description>
+                      Whitelist ACL for DECRYPT_EEK operations for all keys.
+                    </description>
+                  </property>
+
+                  <!--
+                    Key ACLs that grant access to specific key operations. Any permissions
+                    granted here are added to whatever permissions are granted by the whitelists.
+                    The key ACL name should be key.acl.<keyname>.<OPERATION>.
+
+                    The ACL value should be either a username or a username and group name
+                    separated by whitespace.
+
+                    An empty value for an ACL indicates that no user is granted access to that
+                    operation. A value of "*" (for the username or groupname) indicates that
+                    all users are granted access to that operation. Any key operation for which
+                    there is no ACL will default to the default ACL for the operation.
+
+                    Normally adding users or groups for a specific key and DECRYPT_EEK is
+                    sufficient to allow access to data protected with HDFS data at rest
+                    encryption.
+                  -->
+
+                  <!--
+                    The following ACLs are required for proper functioning of services.
+                    CM does not create keys or encryption zones, however our best practices
+                    recommend encryption zones on certain directories. Below we assume that
+                    the user has followed our recommended naming scheme and named the keys
+                    according to our best practices: "hive-key" for the hive service,
+                    "hbase-key" for the hbase service, etc. If the key names are different,
+                    none of this will work out of the box, and you will need to edit these
+                    ACLs to match your key names.
+                  -->
+
+                  <property>
+                    <name>key.acl.hive-key.DECRYPT_EEK</name>
+                    <value>hive hive</value>
+                    <description>
+                      Gives the hive user and the hive group access to the key named "hive-key".
+                      This allows the hive service to read and write files in /user/hive/.
+                      Also note that the impala user ought to be a member of the hive group
+                      in order to enjoy this same access.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>key.acl.hive-key.READ</name>
+                    <value>hive hive</value>
+                    <description>
+                      Required because hive compares key strengths when joining tables.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>key.acl.hbase-key.DECRYPT_EEK</name>
+                    <value>hbase hbase</value>
+                    <description>
+                      Gives the hbase user and hbase group access to the key named "hbase-key".
+                      This allows the hbase service to read and write files in /hbase.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>key.acl.solr-key.DECRYPT_EEK</name>
+                    <value>solr solr</value>
+                    <description>
+                      Gives the solr user and solr group access to the key named "solr-key".
+                      This allows the solr service to read and write files in /solr.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>key.acl.mapred-key.DECRYPT_EEK</name>
+                    <value>yarn,mapred hadoop</value>
+                    <description>
+                      Gives the mapred user and mapred group access to the key named "mapred-key".
+                      This allows mapreduce to read and write files in /user/history.
+                      This is required by YARN.
+                    </description>
+                  </property>
+
+                  <property>
+                    <name>key.acl.hue-key.DECRYPT_EEK</name>
+                    <value>oozie,hue oozie,hue</value>
+                    <description>
+                      Gives the appropriate users and groups access to the key named "hue-key".
+                      This allows hue and oozie to read and write files in /user/hue.
+                      Oozie is required here because it will attempt to access workflows in
+                      /user/hue/oozie/workspaces.
+                    </description>
+                  </property>
+
+
+
+                  <!-- This example is required if there are encryption zones on user's home
+                      directories. -->
+                  <!--
+                  <property>
+                    <name>key.acl.username-key.DECRYPT_EEK</name>
+                    <value>username username,hive,hbase,solr,oozie,hue,yarn</value>
+                    <description>
+                      Designed to be placed on a key that protects the EZ /user/username,
+                      and assumes that the key name is also "username-key", this shows that
+                      a number of services may want to reach in to access data. Remove
+                      those are are not needed for your use-case.
+                    </description>
+                  </property>
+                  -->
+            base: true

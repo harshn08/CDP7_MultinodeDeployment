@@ -1,0 +1,21 @@
+---
+
+# TODO: not idempotent
+- name: Ensure a new OpenStack instance
+  os_server:
+    state: present
+    interface: "{{ _grp.interface | default(_infra.interface) }}"
+    region_name: "{{ _grp.region | default(_infra.region) }}"
+    availability_zone: "{{ _grp.az | default(_infra.az) }}"
+    network: "{{ _grp.subnet | default(_infra.subnet) }}"
+    name: "{{ _grp.tags.Name | lower }}-{{ item }}"
+    image: "{{ _grp.image | default(_infra.image) }}"
+    key_name: "{{ _grp.public_key_id | default(_infra.public_key_id) }}"
+    security_groups: "{{ _grp.security_group | default(_infra.security_group) }}"
+    flavor: "{{ _grp.instance_type | default(_infra.instance_type) }}"
+    #volume_size: "{{ os_volume_size }}"
+    meta: "{{ _grp.tags | combine(_infra.tags) }}"
+    wait: yes
+    userdata: "{{ _grp.bootstrap | default(_infra.bootstrap) }}"
+  ignore_errors: yes
+  loop: "{{ range(_grp.exact_count) | list }}"

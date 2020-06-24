@@ -1,0 +1,24 @@
+---
+# Install required libs for ansible modules mysql_user and mysql_db
+- name: install PyMySQL
+  pip:
+    name: PyMySQL
+
+# Create CM databases and grants permissions to users
+- name: Create CM databases
+  mysql_db:
+    name: "{{ item.name }}"
+    encoding: "utf8"
+    collation: "utf8_general_ci"
+    state: present
+  loop: "{{ _list }}"
+
+- name: Create database users
+  mysql_user:
+    name: "{{ item.user }}"
+    password: "{{ item.pass }}"
+    update_password: always
+    priv: "{{ item.name }}.*:ALL"
+    host: "%"
+    state: present
+  loop: "{{ _list }}"

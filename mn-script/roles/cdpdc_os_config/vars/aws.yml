@@ -1,0 +1,4 @@
+---
+ntp_deamon: chronyd
+ntp_server: "server 169.254.169.123 prefer iburst minpoll 4 maxpoll 4"
+ntp_conf: "/etc/chrony.conf"

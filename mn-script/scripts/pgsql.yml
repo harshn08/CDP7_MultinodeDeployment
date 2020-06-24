@@ -1,0 +1,84 @@
+---
+- name: install PGSQL server
+  yum:
+    name: https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+    state: latest
+
+- name: install PGSQL server
+  yum:
+    name: 
+      - postgresql96
+      - postgresql96-server
+    state: latest
+
+- name: install PGSQL libs 
+  pip:
+    name: psycopg2==2.7.5 
+    extra_args: "--ignore-installed"
+
+- name: update config
+  lineinfile:
+    path: /etc/locale.conf
+    line: 'LC_ALL="en_US.UTF-8"'
+
+- name: this should run only once, so it's not idempotent
+  shell: |
+    /usr/pgsql-9.6/bin/postgresql96-setup initdb
+  ignore_errors: yes
+
+- name: update PGSQL pg_hba.conf
+  copy:
+    content: |
+      local   all             all                                     peer
+      host    all             all             127.0.0.1/32            md5
+      host    all             all             127.0.0.1/32            ident
+      host    all             all             ::1/128                 ident
+    dest: /var/lib/pgsql/9.6/data/pg_hba.conf
+
+- name: update PGSQL postgresql.conf
+  copy:
+    content: |
+      max_connections = 100			# (change requires restart)
+      shared_buffers = 256MB			# min 128kB
+      wal_buffers = 8MB			# min 32kB, -1 sets based on shared_buffers
+      #checkpoint_segments = 16		# in logfile segments, min 1, 16MB each
+      checkpoint_completion_target = 0.9	# checkpoint target duration, 0.0 - 1.0
+      logging_collector = on			# Enable capturing of stderr and csvlog
+      log_filename = 'postgresql-%a.log'	# log file name pattern,
+      log_truncate_on_rotation = on		# If on, an existing log file with the
+      log_rotation_age = 1d			# Automatic rotation of logfiles will
+      log_rotation_size = 0			# Automatic rotation of logfiles will
+      log_timezone = 'UCT'
+      datestyle = 'iso, mdy'
+      timezone = 'UCT'
+      lc_messages = 'en_US.UTF-8'			# locale for system error message
+      lc_monetary = 'en_US.UTF-8'			# locale for monetary formatting
+      lc_numeric = 'en_US.UTF-8'			# locale for number formatting
+      lc_time = 'en_US.UTF-8'				# locale for time formatting
+      default_text_search_config = 'pg_catalog.english'
+    dest: /var/lib/pgsql/9.6/data/postgresql.conf
+
+- systemd:
+    name: postgresql-9.6
+    state: started
+    enabled: yes
+
+- name: write ranger.sql
+  copy:
+    content: |
+      CREATE DATABASE ranger;
+      CREATE USER ranger WITH PASSWORD 'cloudera';
+      GRANT ALL PRIVILEGES ON DATABASE ranger TO ranger;
+      CREATE DATABASE das;
+      CREATE USER das WITH PASSWORD 'cloudera';
+      GRANT ALL PRIVILEGES ON DATABASE das TO das;
+    dest: /tmp/ranger.sql
+    mode: '0777'
+
+- name: create ranger db
+  shell: |
+    psql < /tmp/ranger.sql
+  become: yes
+  become_user: postgres  
+
+

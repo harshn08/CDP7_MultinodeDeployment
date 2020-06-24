@@ -1,0 +1,33 @@
+---
+
+- name: Get info from the instantiated servers
+  os_server_facts:
+    interface: "{{ _grp.interface | default(_infra.interface) }}"
+    region_name: "{{ _grp.region | default(_infra.region) }}"
+    filters:
+      metadata:
+        Name: "{{ _grp.tags.Name }}"
+  register: _os_instances
+
+- name: Wait for SSH to come up
+  wait_for:
+    host: "{{ item.private_v4 }}"
+    port: 22 
+    timeout: 360
+    sleep: 5
+    state: started 
+  loop: "{{ _os_instances.ansible_facts.openstack_servers }}"
+
+- name: add instances to inventory groups
+  add_host:
+    name: "{{ item.private_v4 }}"
+    groups: "{{ _grp.inventory_group }}"
+    ansible_host: "{{ item.private_v4 }}"
+    #ansible_private_key_file: '{{ _infra.private_key_path }}'
+    ansible_user: "{{ _grp.user | default(_infra.user) }}"
+    #
+    public_hostname:  "{{ item.name | lower }}.{{ _infra.domain }}"
+    public_ip:        "{{ item.private_v4 }}"
+    private_hostname: "{{ item.name | lower }}.{{ _infra.domain }}"
+    private_ip:       "{{ item.private_v4 }}"
+  loop: "{{ _os_instances.ansible_facts.openstack_servers }}"
