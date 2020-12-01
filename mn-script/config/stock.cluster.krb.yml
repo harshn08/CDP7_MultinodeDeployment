@@ -27,8 +27,8 @@ cdpdc:
     user: admin
     pass: admin
 
-    repo_file: "https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cm7/7.1.1/redhat7/yum/cloudera-manager-trial.repo"
-    repo_url: "https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cm7/7.1.1"
+    repo_file: "https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cm7/7.1.4/redhat7/yum/cloudera-manager-trial.repo"
+    repo_url: "https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cm7/7.1.4"
 
     license:
       type: enterprise
@@ -104,8 +104,8 @@ cdpdc:
       displayName: CMS
 
   cluster_template:
-    cdhVersion: 7.1.1
-    cmVersion: 7.1.1
+    cdhVersion: 7.1.4
+    cmVersion: 7.1.4
     displayName: StockClusterKRB
     hostTemplates:
       - refName: main_master_template
@@ -220,10 +220,10 @@ cdpdc:
 
     products:
       - product: CDH
-        version: 7.1.1-1.cdh7.1.1.p0.3266817
+        version: 7.1.4-1.cdh7.1.4.p1.6631336
 
     repositories:
-      - https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cdh7/7.1.1.0/parcels/
+      - https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cdh7/7.1.4.1/parcels/
 
     services:
       - refName: hive
