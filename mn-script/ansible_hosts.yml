@@ -4,61 +4,45 @@ all:
     ansible_user: centos
     ansible_private_key_file: "~/GOES.pem"
   hosts:
-    18.206.87.123:
-      ansible_host: 18.206.87.123
+    3.236.27.64:
+      ansible_host: 3.236.27.64
 
-      private_hostname: ip-10-0-5-222.ec2.internal
-      private_ip: 10.0.5.222
-      public_hostname: ec2-18-206-87-123.compute-1.amazonaws.com
-      public_ip: 18.206.87.123
+      private_hostname: ip-172-31-72-183.ec2.internal
+      private_ip: 172.31.72.183
+      public_hostname: ec2-3-236-27-64.compute-1.amazonaws.com
+      public_ip: 3.236.27.64
 
-    3.221.163.147:
+    3.238.116.142:
       ansible_host: 3.221.163.147
 
-      private_hostname: ip-10-0-5-230.ec2.internal
-      private_ip: 10.0.5.230
-      public_hostname: ec2-3-221-163-147.compute-1.amazonaws.com
-      public_ip: 3.221.163.147
+      private_hostname: ip-172-31-67-7.ec2.internal
+      private_ip: 172.31.67.7
+      public_hostname: ec2-3-238-116-142.compute-1.amazonaws.com
+      public_ip: 3.238.116.142
 
-    3.228.14.96:
-      ansible_host: 3.228.14.96
+    3.83.35.122:
+      ansible_host: 3.83.35.122
 
-      private_hostname: ip-10-0-5-176.ec2.internal
-      private_ip: 10.0.5.176
-      public_hostname: ec2-3-228-14-96.compute-1.amazonaws.com
-      public_ip: 3.228.14.96
+      private_hostname: ip-172-31-75-120.ec2.internal
+      private_ip: 172.31.75.120
+      public_hostname: ec2-3-83-35-122.compute-1.amazonaws.com
+      public_ip: 3.83.35.122
 
-    3.234.141.100:
-      ansible_host: 3.234.141.100
+    3.237.39.237:
+      ansible_host: 3.237.39.237
 
-      private_hostname: ip-10-0-5-52.ec2.internal
-      private_ip: 10.0.5.52
-      public_hostname: ec2-3-234-141-100.compute-1.amazonaws.com
-      public_ip: 3.234.141.100
-    
-    34.201.22.138:
-      ansible_host: 34.201.22.138
+      private_hostname: ip-172-31-73-129.ec2.internal
+      private_ip: 172.31.73.129
+      public_hostname: ec2-3-237-39-237.compute-1.amazonaws.com
+      public_ip: 3.237.39.237
 
-      private_hostname: ip-10-0-5-58.ec2.internal
-      private_ip: 10.0.5.58
-      public_hostname: ec2-34-201-22-138.compute-1.amazonaws.com
-      public_ip: 34.201.22.138
-    
-    34.232.95.7:
-      ansible_host: 34.232.95.7
+    52.87.12.245:
+      ansible_host: 52.87.12.245
 
-      private_hostname: ip-10-0-5-26.ec2.internal
-      private_ip: 10.0.5.26
-      public_hostname: ec2-34-232-95-7.compute-1.amazonaws.com
-      public_ip: 34.232.95.7
-    
-    35.170.68.6:
-      ansible_host: 35.170.68.6
-
-      private_hostname: ip-10-0-5-242.ec2.internal
-      private_ip: 10.0.5.242
-      public_hostname: ec2-35-170-68-6.compute-1.amazonaws.com
-      public_ip: 35.170.68.6
+      private_hostname: ip-10-0-0-13.ec2.internal
+      private_ip: 10.0.0.13
+      public_hostname: ec2-52-87-12-245.compute-1.amazonaws.com
+      public_ip: 52.87.12.245  
 
   children:
     local:
@@ -68,31 +52,30 @@ all:
 
     cm_server:
       hosts:
-        3.228.14.96:
+        3.236.27.64:
     db_server:
       hosts:
-        3.228.14.96:
+        3.236.27.64:
     main_master:
       hosts:
-        3.228.14.96:
+        3.236.27.64:
+    krb5_server:
+      hosts:
+      3.236.27.64:
 
     masters:
       hosts:
-        34.201.22.138:
+        3.236.27.64:
         
     workers:
       hosts:
-        18.206.87.123:
-        3.221.163.147:
-        3.234.141.100:
-    
-    cdf:
-      hosts:
-        34.232.95.7:
+        3.238.116.142:
+        3.237.39.237:
+        3.83.35.122:
 
-    cdsw_master:
+    gateway:
       hosts:
-        35.170.68.6:
+        52.87.12.245:    
 
     cdpdc:
       children:
@@ -101,5 +84,6 @@ all:
         cm_server:
         masters:
         workers:
+        gateway:
         cdf:
         cdsw_master:

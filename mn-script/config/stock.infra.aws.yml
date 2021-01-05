@@ -60,6 +60,23 @@ instances:
         Name: "{{ cdpdc_teardown }}-Worker"
         teardown: "{{ cdpdc_teardown }}"
 
+    - inventory_group:
+        - gateway
+        - cdpdc
+      exact_count: 1
+      count_tag:
+        Name: "{{ cdpdc_teardown }}-Gateway"
+      instance_type: m5.2xlarge
+      public_ip: yes
+      volumes:
+        - name: /dev/sda1
+          type: gp2
+          size: 50
+          delete_on_termination: true
+      tags:
+        Name: "{{ cdpdc_teardown }}-Gateway"
+        teardown: "{{ cdpdc_teardown }}"
+
     # - inventory_group:  
     #     - cdsw_master
     #     - cdpdc
