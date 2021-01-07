@@ -153,6 +153,19 @@ cdpdc:
           - yarn-NODEMANAGER-BASE
           - zookeeper-SERVER-BASE
 
+      - refName: gateway_template
+        cardinality: 1
+        roleConfigGroupsRefNames:
+          - hbase-GATEWAY-BASE
+          - hdfs-GATEWAY-BASE
+          - hive-GATEWAY-BASE
+          - hive_on_tez-GATEWAY-BASE
+          - knox-KNOX-GATEWAY-BASE
+          - spark_on_yarn-GATEWAY-BASE
+          - tez-GATEWAY-BASE
+          - yarn-GATEWAY-BASE
+          - zookeeper-SERVER-BASE
+
     instantiator:
       clusterName: StockClusterKRB
       hosts:
@@ -167,6 +180,9 @@ cdpdc:
 
         - hostNameRange: "{{ hostvars[groups.workers[0]].private_hostname }}, {{ hostvars[groups.workers[1]].private_hostname }}, {{ hostvars[groups.workers[2]].private_hostname }}"
           hostTemplateRefName: worker_template
+
+        - hostName: "{{ hostvars[groups.gateway[0]].private_hostname }}"
+          hostTemplateRefName: gateway_template
 
       variables:
         - name: atlas-ATLAS_SERVER-BASE-atlas_admin_password
@@ -220,10 +236,10 @@ cdpdc:
 
     products:
       - product: CDH
-        version: 7.1.4-1.cdh7.1.4.p1.6631336
+        version: 7.1.4-1.cdh7.1.4.p6.8031028
 
     repositories:
-      - https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cdh7/7.1.4.1/parcels/
+      - https://{{repo_username}}:{{repo_password}}@archive.cloudera.com/p/cdh7/7.1.4.6/parcels/
 
     services:
       - refName: hive
@@ -270,6 +286,9 @@ cdpdc:
         roleConfigGroups:
           - refName: hive_on_tez-HIVESERVER2-BASE
             roleType: HIVESERVER2
+            base: true
+          - refName: hive_on_tez-GATEWAY-BASE
+            roleType: GATEWAY
             base: true
       - refName: knox
         serviceType: KNOX
@@ -473,6 +492,9 @@ cdpdc:
           - refName: hdfs-BALANCER-BASE
             roleType: BALANCER
             base: true
+          - refName: hdfs-GATEWAY-BASE
+            roleType: GATEWAY
+            base: true
       - refName: yarn
         serviceType: YARN
         serviceConfigs:
@@ -487,6 +509,9 @@ cdpdc:
             base: true
           - refName: yarn-JOBHISTORY-BASE
             roleType: JOBHISTORY
+            base: true
+          - refName: yarn-GATEWAY-BASE
+            roleType: GATEWAY
             base: true
       - refName: hbase
         serviceType: HBASE
@@ -524,6 +549,12 @@ cdpdc:
             configs:
               - name: hbase_master_java_heapsize
                 value: "524288000"
+            base: true
+          - refName: hbase-GATEWAY-BASE
+            roleType: GATEWAY
+            configs:
+              - name: hbase_client_config_safety_valve
+                value: "<property><name>phoenix.schema.isNamespaceMappingEnabled</name><value>true</value></property><property><name>phoenix.functions.allowUserDefinedFunctions</name><value>true</value></property>"
             base: true
       - refName: kms
         serviceType: KMS
