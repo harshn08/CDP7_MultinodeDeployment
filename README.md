@@ -2,7 +2,7 @@
 Automation for CDP Datacenter 7.x multinode deployment with Kerberos, KMS and TLS
 
 CDP Multinode script using Docker on Mac/Windows 10
-This will create brand new 4 instances on AWS( 1 -4xlarge for master and 3- 2xlarge worker nodes)
+This will create brand new 5 instances on AWS( 1 -4xlarge for master and 3- 2xlarge worker nodes and 1- xlarge gateway node)
 CDP DC will be installed with full security (Kerberos,TLS and KMS)
 
 Updated on June 20, 2020
